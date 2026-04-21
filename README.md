@@ -8,9 +8,11 @@ xgin - golang library with extensions for the [Gin](https://github.com/gin-gonic
 go get github.com/Deimvis-go/xgin
 ```
 
-## Middlewares
+## Examples
 
-### Request Id
+### Middlewares
+
+#### Request Id
 
 ```go
 r.Use(ginmw.RequestId(&ginmw.DefaultRequestIdConfig))
@@ -21,7 +23,7 @@ r.GET("/ping", func(c *gin.Context) {
 })
 ```
 
-### Timeout
+#### Timeout
 
 ```go
 r.Use(ginmw.Timeout(&ginmw.TimeoutMiddlewareConfig{
@@ -33,7 +35,7 @@ r.Use(ginmw.Timeout(&ginmw.TimeoutMiddlewareConfig{
 }, logger))
 ```
 
-### Recovery
+#### Recovery
 
 ```go
 r.Use(ginmw.Recovery(logger, map[any]ginmw.ErrorHandlerFunc{
@@ -42,7 +44,7 @@ r.Use(ginmw.Recovery(logger, map[any]ginmw.ErrorHandlerFunc{
 }))
 ```
 
-### Prometheus
+#### Prometheus
 
 ```go
 r.Use(ginmw.Prometheus(ginmw.PrometheusConfig{
@@ -55,7 +57,7 @@ r.Use(ginmw.Prometheus(ginmw.PrometheusConfig{
 }))
 ```
 
-## Handler
+### Handler
 
 ```go
 func Create(ctx context.Context, req *CreateRequest) fw.Response {
@@ -67,7 +69,7 @@ func Create(ctx context.Context, req *CreateRequest) fw.Response {
 r.POST("/v1/items", ginss.NewHandler(items.Create)))
 ```
 
-## Context Decoding
+### Context Decoding
 
 ```go
 func myMiddleware(c *gin.Context) {
