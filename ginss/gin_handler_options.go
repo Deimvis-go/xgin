@@ -3,10 +3,11 @@ package ginss
 import (
 	"context"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/Deimvis-go/fw/fw"
 	"github.com/Deimvis-go/logs/logs"
 	"github.com/Deimvis-go/xgin/ginctx"
-	"github.com/gin-gonic/gin"
 )
 
 type GinHandlerConfig struct {

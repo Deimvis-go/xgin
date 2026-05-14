@@ -3,20 +3,18 @@ package ginmw
 import (
 	"fmt"
 
-	"github.com/Deimvis-go/xgin/ginmw/internal/ginmwctx"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/Deimvis-go/valid"
+	"github.com/Deimvis-go/xgin/ginmw/internal/ginmwctx"
+	"github.com/Deimvis/go-ext/go1.25/ext"
+	"github.com/Deimvis/go-ext/go1.25/xcheck/xinvar"
+	"github.com/Deimvis/go-ext/go1.25/xcheck/xmust"
 )
 
-// RequestId returns a middleware that assigns a request id to every incoming
-// request, picked from a configured request header or generated afresh.
-// The request id can be retrieved from the request's context via
-// [GetRequestId] / [GetRequestIdOr].
 func RequestId(cfg *RequestIdMiddlewareConfig) gin.HandlerFunc {
-	if err := cfg.validate(); err != nil {
-		panic(fmt.Errorf("ginmw: invalid RequestId config: %w", err))
-	}
-	return func(c *gin.Context) {
+	xmust.NoErr(valid.Deep(cfg))
+	mw := func(c *gin.Context) {
 		var requestId string
 		var header *headerEntry
 		if cfg.RequestHeaders != nil {
@@ -27,9 +25,7 @@ func RequestId(cfg *RequestIdMiddlewareConfig) gin.HandlerFunc {
 		} else {
 			requestId = genRequestId(&cfg.IdGeneration)
 		}
-		if requestId == "" {
-			panic("ginmw: generated request id is empty")
-		}
+		xinvar.True(len(requestId) > 0)
 
 		ginmwctx.SetRequestId(c, requestId)
 		if cfg.Context != nil {
@@ -38,12 +34,14 @@ func RequestId(cfg *RequestIdMiddlewareConfig) gin.HandlerFunc {
 			}
 		}
 
+		// in gin header can't be written after body (http limitation, actually)
 		if cfg.ResponseHeaders != nil {
 			for _, name := range cfg.ResponseHeaders.HeaderNames {
 				c.Writer.Header().Set(name, requestId)
 			}
 			if cfg.ResponseHeaders.ProxyMatchedRequestHeader != nil && *cfg.ResponseHeaders.ProxyMatchedRequestHeader {
 				if header != nil {
+					xinvar.Eq(header.value, requestId)
 					c.Writer.Header().Set(header.name, requestId)
 				}
 			}
@@ -51,45 +49,35 @@ func RequestId(cfg *RequestIdMiddlewareConfig) gin.HandlerFunc {
 
 		c.Next()
 	}
+	return mw
 }
 
-// GetRequestId returns the request id previously set by the [RequestId]
-// middleware.
 var GetRequestId = ginmwctx.GetRequestId
-
-// GetRequestIdOr returns the request id, or fallback if none was set.
 var GetRequestIdOr = ginmwctx.GetRequestIdOr
 
 func findRequestIdHeader(cfg *RequestIdRequestHeadersConfig, c *gin.Context) *headerEntry {
 	switch cfg.ResolutionAlgorithm {
 	case HRA_FirstNotEmpty:
 		for name, values := range c.Request.Header {
-			if containsStr(cfg.CandidateHeaderNames, name) && len(values) > 0 && len(values[0]) > 0 {
+			if ext.Contains(cfg.CandidateHeaderNames, name) && len(values) > 0 && len(values[0]) > 0 {
 				return &headerEntry{name: name, value: values[0]}
 			}
 		}
 	default:
-		panic(fmt.Errorf("ginmw: unknown resolution algorithm: %s", cfg.ResolutionAlgorithm))
+		panic(fmt.Errorf("got unexpected resolution algorithm: %s", cfg.ResolutionAlgorithm))
 	}
 	return nil
 }
 
 func genRequestId(cfg *RequetsIdGenerationConfig) string {
+	var requestId string
 	switch cfg.Algorithm {
 	case RIDGA_UUID4:
-		return uuid.New().String()
+		requestId = uuid.New().String()
 	default:
-		panic(fmt.Errorf("ginmw: unknown request id generation algorithm: %s", cfg.Algorithm))
+		panic(fmt.Errorf("got unexpected request id generation algorithm: %s", cfg.Algorithm))
 	}
-}
-
-func containsStr(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	return requestId
 }
 
 type headerEntry struct {
@@ -97,12 +85,8 @@ type headerEntry struct {
 	value string
 }
 
-// DefaultRequestIdHeaderName is the header name used by [DefaultRequestIdConfig].
 var DefaultRequestIdHeaderName = "X-Request-Id"
 
-// DefaultRequestIdConfig is a reasonable default configuration for the
-// [RequestId] middleware: it reads "X-Request-Id" on incoming requests,
-// writes it on the response, and generates a UUIDv4 when absent.
 var DefaultRequestIdConfig = RequestIdMiddlewareConfig{
 	RequestHeaders: &RequestIdRequestHeadersConfig{
 		CandidateHeaderNames: []string{DefaultRequestIdHeaderName},

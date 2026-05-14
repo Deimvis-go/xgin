@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/Deimvis/go-ext/go1.25/xcheck/xmust"
 	"github.com/gin-gonic/gin"
+	"github.com/Deimvis/go-ext/go1.25/xcheck/xmust"
 )
 
 // RetrieveGinContext allows to retrieve *gin.Context back from context.Context.

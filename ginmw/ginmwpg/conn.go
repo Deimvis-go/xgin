@@ -5,19 +5,18 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Deimvis-go/xgin/ginctx"
-	"github.com/Deimvis/go-ext/go1.25/xcheck/xmust"
 	"github.com/gin-gonic/gin"
+	"github.com/Deimvis-go/xgin/ginctx"
+	"github.com/Deimvis-go/xpg/pg"
+	"github.com/Deimvis-go/xpg/pg/pgconn"
+	"github.com/Deimvis-go/xpg/pg/pgtrace"
+	"github.com/Deimvis/go-ext/go1.25/xcheck/xmust"
+	"github.com/Deimvis/go-ext/go1.25/xoptional"
 )
 
-// Conn returns a middleware that acquires a connection from cp in the given
-// mode, stores it in the gin context under [CtxConnKey](mode), and releases
-// it when the request finishes.
-//
-// If the acquire fails because the request context's deadline expired, the
-// middleware panics with an [AcquireConnTimeoutError]; other errors are
-// re-panicked as-is so callers can plug in their own recovery middleware.
-func Conn(mode Mode, cp Provider, opts ...AcquireOption) gin.HandlerFunc {
+// TODO: implement LazyConn(mode, cp, opts...); for ConnBuilder: LazyRO(), LazyRW()
+
+func Conn(mode pg.ConnMode, cp pgconn.Provider, opts ...pgconn.AcquireOption) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		release := acquireConn(c, cp, mode, opts...)
 		defer release()
@@ -25,39 +24,35 @@ func Conn(mode Mode, cp Provider, opts ...AcquireOption) gin.HandlerFunc {
 	}
 }
 
-// NewConnBuilder returns a fluent builder over [Conn].
 func NewConnBuilder() ConnBuilder {
 	return &connBuilder{}
 }
 
-// ConnBuilder builds a [Conn] middleware step by step. It exists so callers
-// can share a partially configured builder (provider, options) and finalize
-// it per-route with [ConnBuilder.RO] or [ConnBuilder.RW].
 type ConnBuilder interface {
-	WithProvider(cp Provider) ConnBuilder
-	WithOpts(opts ...AcquireOption) ConnBuilder
+	WithConnProvider(cp pgconn.Provider) ConnBuilder
+	WithOpts(opts ...pgconn.AcquireOption) ConnBuilder
 	ClearOpts() ConnBuilder
-	WithMode(m Mode) ConnBuilder
+	WithMode(m pgconn.Mode) ConnBuilder
 	Build() gin.HandlerFunc
 
-	// RO is a shortcut for WithMode(RO).Build().
+	// RO is a shortcut for WithMode(pgconn.RO).Build()
 	RO() gin.HandlerFunc
-	// RW is a shortcut for WithMode(RW).Build().
+	// RW is a shortcut for WithMode(pgconn.RW).Build()
 	RW() gin.HandlerFunc
 }
 
 type connBuilder struct {
-	cp   Provider
-	opts []AcquireOption
-	mode Mode
+	cp   pgconn.Provider
+	opts []pgconn.AcquireOption
+	mode pgconn.Mode
 }
 
-func (cb *connBuilder) WithProvider(cp Provider) ConnBuilder {
+func (cb *connBuilder) WithConnProvider(cp pgconn.Provider) ConnBuilder {
 	cb.cp = cp
 	return cb
 }
 
-func (cb *connBuilder) WithOpts(opts ...AcquireOption) ConnBuilder {
+func (cb *connBuilder) WithOpts(opts ...pgconn.AcquireOption) ConnBuilder {
 	cb.opts = append(cb.opts, opts...)
 	return cb
 }
@@ -67,34 +62,37 @@ func (cb *connBuilder) ClearOpts() ConnBuilder {
 	return cb
 }
 
-func (cb *connBuilder) WithMode(m Mode) ConnBuilder {
+func (cb *connBuilder) WithMode(m pgconn.Mode) ConnBuilder {
 	cb.mode = m
 	return cb
 }
 
 func (cb *connBuilder) Build() gin.HandlerFunc {
 	xmust.NotNilInterface(cb.cp, "conn provider not set")
-	xmust.True(cb.mode == RO || cb.mode == RW, "conn mode not set")
+	xmust.True(cb.mode == pgconn.RO || cb.mode == pgconn.RW, "conn mode not set")
 	return Conn(cb.mode, cb.cp, cb.opts...)
 }
 
 func (cb *connBuilder) RO() gin.HandlerFunc {
-	return cb.WithMode(RO).Build()
+	return cb.WithMode(pgconn.RO).Build()
 }
 
 func (cb *connBuilder) RW() gin.HandlerFunc {
-	return cb.WithMode(RW).Build()
+	return cb.WithMode(pgconn.RW).Build()
 }
 
-func acquireConn(c *gin.Context, cp Provider, mode Mode, opts ...AcquireOption) func() {
-	// Decode the gin context so we have a leak-safe context that survives
-	// past c.Next(). Decode also applies callbacks installed by other
-	// middlewares (e.g. ginmwtimeout adds the request deadline).
+func acquireConn(c *gin.Context, cp pgconn.Provider, mode pg.ConnMode, opts ...pgconn.AcquireOption) func() {
+	// decode context for safety, because we may leak it into goroutine,
+	// also automatically applies callbacks from different middlewares
+	// (e.g. may add logging "req_id" field)
 	ctx := xmust.Do(ginctx.Decode(c))
+	opts = append(opts, pgconn.AcquireWithMeta(pgtrace.ConnAcquireMeta{
+		ConnMode: xoptional.New(mode),
+	}))
 	conn, own, err := cp.Acquire(ctx, mode, opts...)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			err = AcquireConnTimeoutError{mode: mode}
+			err = newAcquireConnTimeoutError(mode)
 		}
 		panic(err)
 	}
@@ -102,18 +100,20 @@ func acquireConn(c *gin.Context, cp Provider, mode Mode, opts ...AcquireOption) 
 	if own.HasValue() {
 		free = own.Value().MustTake().FreeConn
 	}
-	key := ctxConnKey(mode)
-	c.Set(key, conn)
+	connCtxKey := pg.CtxConnKey(mode)
+	c.Set(connCtxKey, conn)
 	return func() {
 		free(context.WithoutCancel(ctx))
-		c.Set(key, nil)
+		c.Set(connCtxKey, nil)
 	}
 }
 
-// AcquireConnTimeoutError is returned when [Provider.Acquire] fails because
-// the request's deadline expired. It unwraps to [context.DeadlineExceeded].
+func newAcquireConnTimeoutError(mode pg.ConnMode) AcquireConnTimeoutError {
+	return AcquireConnTimeoutError{mode: mode}
+}
+
 type AcquireConnTimeoutError struct {
-	mode Mode
+	mode pg.ConnMode
 }
 
 func (e AcquireConnTimeoutError) Error() string {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/Deimvis/go-ext/go1.25/xcheck/xmust"
 )
 
 func TestDecode(t *testing.T) {
@@ -80,8 +81,7 @@ func TestDecode(t *testing.T) {
 			r := gin.New()
 			r.ContextWithFallback = ctxFallback
 			r.GET("/", func(c *gin.Context) {
-				ctx, err := Decode(c)
-				require.NoError(t, err)
+				ctx := xmust.Do(Decode(c))
 				actDedl, ok := ctx.Deadline()
 				if ctxFallback {
 					require.True(t, ok)

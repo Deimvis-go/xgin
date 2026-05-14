@@ -2,69 +2,45 @@ package ginmw
 
 import (
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/Deimvis-go/ms/ms/msconfig"
+	"github.com/Deimvis-go/xprometheus/prom"
+	"github.com/Deimvis/go-ext/go1.25/xfallback/xstringfb"
 )
 
-// PrometheusLabelUnknown is the fallback value written into string labels
-// when the underlying source is empty.
-const PrometheusLabelUnknown = "unknown"
+// TODO: add label "is_no_route" in order detect 404 requests to not registered handlers
+//       it will also require to add custom gin.NoRoute handler that will pass corresponding flag to context.
 
-// PrometheusExtraLabel extends the default label set with a custom label
-// extracted from the request.
-type PrometheusExtraLabel struct {
-	// Name is the label name. It must match the label name declared on the
-	// underlying collectors.
-	Name string
-	// Value returns the label value for the given request. An empty string
-	// is replaced with [PrometheusLabelUnknown].
-	Value func(c *gin.Context) string
-}
-
-// PrometheusConfig configures the [Prometheus] middleware.
-//
-// Collectors must be registered with the following base labels:
-//   - StartC:    ["method", "path"] + ExtraLabels
-//   - FinishC:   ["method", "path", "code"] + ExtraLabels
-//   - DurationH: ["method", "path", "code"] + ExtraLabels
-type PrometheusConfig struct {
-	// StartC is incremented when a request enters the middleware.
-	StartC *prometheus.CounterVec
-	// FinishC is incremented when a request leaves the middleware.
-	FinishC *prometheus.CounterVec
-	// DurationH records the duration of each request, in seconds.
-	DurationH *prometheus.HistogramVec
-	// ExtraLabels extends the default label set. Every label declared here
-	// must also be declared on the collectors above.
-	ExtraLabels []PrometheusExtraLabel
-}
-
-// Prometheus returns a middleware that records per-request Prometheus metrics.
-func Prometheus(cfg PrometheusConfig) gin.HandlerFunc {
+// Prometheus metrics must have the following labels:
+// startC:    ["method", "path", "client_host", "client_cloud_service", "client_cloud_instance", "client_ip"]
+// finishC:   ["method", "path", "client_host", "client_cloud_service", "client_cloud_instance", "client_ip", "code"]
+// durationH: ["method", "path", "client_host", "client_cloud_service", "client_cloud_instance", "client_ip", "code"]
+func Prometheus(
+	startC *prometheus.CounterVec,
+	finishC *prometheus.CounterVec,
+	durationH prom.DurationHistogramVec,
+) func(c *gin.Context) {
+	g := prom.NewIntervalGroup(startC, finishC, durationH)
 	fb := func(s string) string {
-		if s == "" {
-			return PrometheusLabelUnknown
-		}
-		return s
+		return xstringfb.OnEmpty(s, prom.LabelUnknown)
 	}
 	return func(c *gin.Context) {
-		labels := prometheus.Labels{
+		ls := prometheus.Labels{
 			"method": c.Request.Method,
 			"path":   fb(c.FullPath()),
+
+			"client_host":           fb(c.Request.Header.Get(msconfig.XClientHost)),
+			"client_cloud_service":  fb(c.Request.Header.Get(msconfig.XClientCloudService)),
+			"client_cloud_instance": fb(c.Request.Header.Get(msconfig.XClientCloudInstance)),
+			"client_ip":             fb(c.ClientIP()),
 		}
-		for _, l := range cfg.ExtraLabels {
-			labels[l.Name] = fb(l.Value(c))
-		}
-
-		start := time.Now()
-		cfg.StartC.With(labels).Inc()
-
-		c.Next()
-
-		labels["code"] = strconv.Itoa(c.Writer.Status())
-		cfg.FinishC.With(labels).Inc()
-		cfg.DurationH.With(labels).Observe(time.Since(start).Seconds())
+		g.Record(ls, func(rc prom.RecordControl) {
+			c.Next()
+			rc.AddLabels(prometheus.Labels{
+				"code": strconv.Itoa(c.Writer.Status()),
+			})
+		})
 	}
 }

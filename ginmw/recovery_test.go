@@ -38,7 +38,8 @@ func TestRecovery(t *testing.T) {
 		})
 		require.Equal(t, 500, w.Code)
 		require.Len(t, logs, 1)
-		require.Equal(t, "Recovered on unknown entity", logs[0].Message)
+		l := logs[0]
+		require.Equal(t, "Recovered on unknown entity", l.Message)
 	})
 }
 
@@ -48,14 +49,51 @@ func TestRecovery_MatchError(t *testing.T) {
 		e             TestError
 		target        TestError
 		exp           bool
-		expSameTarget bool
+		expSameTarget bool // whether matchError result returns same value as target
 	}{
-		{"not-matched", err1A, err2A, false, false},
-		{"top-level-exact-match", err1A, err1A, true, true},
-		{"top-level-type-match", err1A, err1B, true, false},
-		{"top-level-exact-match_having-internal", err2A_1A, err2A, true, false},
-		{"internal-level-exact-match", err2A_1A, err1A, true, true},
-		{"internal-level-type-match", err2A_1B, err1A, true, false},
+
+		{
+			"not-matched",
+			err1A,
+			err2A,
+			false,
+			false,
+		},
+		{
+			"top-level-exact-match",
+			err1A,
+			err1A,
+			true,
+			true,
+		},
+		{
+			"top-level-type-match",
+			err1A,
+			err1B,
+			true,
+			false,
+		},
+		{
+			"top-level-exact-match_having-internal",
+			err2A_1A,
+			err2A,
+			true,
+			false,
+		},
+		{
+			"internal-level-exact-match",
+			err2A_1A,
+			err1A,
+			true,
+			true,
+		},
+		{
+			"internal-level-type-match",
+			err2A_1B,
+			err1A,
+			true,
+			false,
+		},
 	}
 
 	for _, tc := range tcs {
@@ -94,25 +132,33 @@ type TestError interface {
 	CmpEq(TestError) bool
 }
 
-var (
-	err1A    = &testError1{"error 1A", nil}
-	err1B    = &testError1{"error 1B", nil}
-	err2A    = &testError2{"error 2A", nil}
-	err2A_1A = &testError2{"error 2A", err1A}
-	err2A_1B = &testError2{"error 2A", err1B}
-)
+var err1A = &testError1{"error 1A", nil}
+var err1B = &testError1{"error 1B", nil}
+var err2A = &testError2{"error 2A", nil}
+var err2A_1A = &testError2{"error 2A", err1A}
+var err2A_1B = &testError2{"error 2A", err1B}
 
 type testError1 struct {
 	msg      string
 	internal error
 }
 
-func (e *testError1) Error() string     { return e.msg }
-func (e *testError1) Unwrap() error     { return e.internal }
-func (e *testError1) Clone() TestError  { c := *e; return &c }
-func (e *testError1) CmpEq(o TestError) bool {
-	if x, ok := o.(*testError1); ok {
-		return e.msg == x.msg && e.internal == x.internal
+func (e *testError1) Error() string {
+	return e.msg
+}
+
+func (e *testError1) Unwrap() error {
+	return e.internal
+}
+
+func (e *testError1) Clone() TestError {
+	copy := *e
+	return &copy
+}
+
+func (e *testError1) CmpEq(other TestError) bool {
+	if o, ok := other.(*testError1); ok {
+		return e.msg == o.msg && e.internal == o.internal
 	}
 	return false
 }
@@ -122,12 +168,46 @@ type testError2 struct {
 	internal error
 }
 
-func (e *testError2) Error() string     { return e.msg }
-func (e *testError2) Unwrap() error     { return e.internal }
-func (e *testError2) Clone() TestError  { c := *e; return &c }
-func (e *testError2) CmpEq(o TestError) bool {
-	if x, ok := o.(*testError2); ok {
-		return e.msg == x.msg && e.internal == x.internal
+func (e *testError2) Error() string {
+	return e.msg
+}
+
+func (e *testError2) Unwrap() error {
+	return e.internal
+}
+
+func (e *testError2) Clone() TestError {
+	copy := *e
+	return &copy
+}
+
+func (e *testError2) CmpEq(other TestError) bool {
+	if o, ok := other.(*testError2); ok {
+		return e.msg == o.msg && e.internal == o.internal
+	}
+	return false
+}
+
+type testError3 struct {
+	testError1
+}
+
+func (e *testError3) Error() string {
+	return e.msg
+}
+
+func (e *testError3) Unwrap() error {
+	return e.internal
+}
+
+func (e *testError3) Clone() TestError {
+	copy := *e
+	return &copy
+}
+
+func (e *testError3) CmpEq(other TestError) bool {
+	if o, ok := other.(*testError3); ok {
+		return e.msg == o.msg && e.internal == o.internal
 	}
 	return false
 }

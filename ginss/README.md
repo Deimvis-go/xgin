@@ -1,3 +1,5 @@
+Moved to https://github.com/Deimvis-go/xgin
+
 # ginss
 
 ginss (gin shortcuts) — a Golang package provides off-the-shelf solutions for gin, integrated with fw package.

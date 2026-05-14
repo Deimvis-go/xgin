@@ -1,5 +1,3 @@
-// Package ginmwctx stores values set by ginmw middlewares inside gin/Go
-// contexts. It is internal: import via the parent ginmw package.
 package ginmwctx
 
 import (
@@ -25,4 +23,4 @@ func SetRequestId(c *gin.Context, v string) {
 	c.Set(requestIdCtxKey, v)
 }
 
-const requestIdCtxKey = "request_id__github.com/Deimvis-go/xgin/ginmw"
+var requestIdCtxKey = "request_id__github.com/Deimvis-go/xgin/ginmw"

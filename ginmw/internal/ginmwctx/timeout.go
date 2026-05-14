@@ -17,6 +17,11 @@ func GetRequestTimeout(ctx context.Context) (time.Duration, bool) {
 	return v, ok
 }
 
+func GetCurrentOperation(ctx context.Context) (any, bool) {
+	v := ctx.Value(requestCurrentOperationCtxKey)
+	return v, v != nil
+}
+
 func SetRequestStartTime(c *gin.Context, v time.Time) {
 	c.Set(requestStartTimeCtxKey, v)
 }
@@ -25,7 +30,6 @@ func SetRequestTimeout(c *gin.Context, v time.Duration) {
 	c.Set(requestTimeoutCtxKey, v)
 }
 
-const (
-	requestStartTimeCtxKey = "request_start_time__github.com/Deimvis-go/xgin/ginmw"
-	requestTimeoutCtxKey   = "request_timeout__github.com/Deimvis-go/xgin/ginmw"
-)
+var requestStartTimeCtxKey = "request_start_time__github.com/Deimvis-go/xgin/ginmw"
+var requestTimeoutCtxKey = "request_timeout__github.com/Deimvis-go/xgin/ginmw"
+var requestCurrentOperationCtxKey = "request_current_operation__github.com/Deimvis-go/xgin/ginmw"

@@ -16,6 +16,8 @@ func TestCallbackStore(t *testing.T) {
 			t.Fail()
 			return false
 		})
+
+		// internals
 		require.Equal(t, int64(0), cs.anonCnt.Load())
 	})
 	t.Run("single-add", func(t *testing.T) {
@@ -29,6 +31,8 @@ func TestCallbackStore(t *testing.T) {
 			return true
 		})
 		require.Equal(t, 1, cnt)
+
+		// internals
 		require.Equal(t, int64(1), cs.anonCnt.Load())
 	})
 	t.Run("multiple-add/sequential", func(t *testing.T) {
@@ -44,6 +48,8 @@ func TestCallbackStore(t *testing.T) {
 			return true
 		})
 		require.Equal(t, 100, cnt)
+
+		// internals
 		require.Equal(t, int64(100), cs.anonCnt.Load())
 	})
 	t.Run("multiple-add/concurrent", func(t *testing.T) {
@@ -65,6 +71,8 @@ func TestCallbackStore(t *testing.T) {
 			return true
 		})
 		require.Equal(t, 100, cnt)
+
+		// internals
 		require.Equal(t, int64(100), cs.anonCnt.Load())
 	})
 }

@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"github.com/Deimvis/go-ext/go1.25/ext"
+	"github.com/Deimvis/go-ext/go1.25/xptr"
 )
-
-func ptr[T any](v T) *T { return &v }
 
 func TestRequestId_AccessFromHanlder(t *testing.T) {
 	testCases := []struct {
@@ -137,13 +137,13 @@ func TestRequestId_AccessFromResponse(t *testing.T) {
 			})
 
 			w := makeRequest(t, r)
-			seen := make(map[string]struct{})
+			var values []string
 			for _, name := range tc.rh.HeaderNames {
-				vals := w.Header().Values(name)
-				require.Len(t, vals, 1)
-				seen[vals[0]] = struct{}{}
+				require.Len(t, w.Header().Values(name), 1)
+				values = append(values, w.Header().Values(name)[0])
 			}
-			require.LessOrEqual(t, len(seen), 1)
+			ext.DeduplicateIn(&values)
+			require.LessOrEqual(t, len(values), 1)
 		})
 	}
 }
@@ -252,6 +252,8 @@ func TestRequestId_PassFromRequest(t *testing.T) {
 	}
 }
 
+// - proxy_from_request (tc: single response header + another request header -> multiple resonse headers)
+
 func TestRequestId_ProxyFromRequest(t *testing.T) {
 	testCases := []struct {
 		title   string
@@ -268,7 +270,7 @@ func TestRequestId_ProxyFromRequest(t *testing.T) {
 			},
 			RequestIdResponseHeadersConfig{
 				HeaderNames:               []string{"request-id-header2"},
-				ProxyMatchedRequestHeader: ptr(true),
+				ProxyMatchedRequestHeader: xptr.T(true),
 			},
 			http.Header{
 				"request-id-header1": []string{"my_request_id"},
@@ -286,7 +288,7 @@ func TestRequestId_ProxyFromRequest(t *testing.T) {
 			},
 			RequestIdResponseHeadersConfig{
 				HeaderNames:               []string{"request-id-header2"},
-				ProxyMatchedRequestHeader: ptr(false),
+				ProxyMatchedRequestHeader: xptr.T(false),
 			},
 			http.Header{
 				"request-id-header1": []string{"my_request_id"},
@@ -315,7 +317,8 @@ func TestRequestId_ProxyFromRequest(t *testing.T) {
 			require.Equal(t, 200, w.Code)
 
 			for name, expValues := range tc.expResp {
-				require.Equal(t, expValues, w.Header().Values(name))
+				actValues := w.Header().Values(name)
+				require.Equal(t, expValues, actValues)
 			}
 		})
 	}
