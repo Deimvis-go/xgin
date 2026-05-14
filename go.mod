@@ -3,11 +3,11 @@ module github.com/Deimvis-go/xgin
 go 1.25.1
 
 require (
-	github.com/Deimvis-go/fw v0.1.0
-	github.com/Deimvis-go/logs v0.1.0
-	github.com/Deimvis-go/ms v0.1.0
-	github.com/Deimvis-go/valid v0.1.0
-	github.com/Deimvis-go/xpg v0.1.3
+	github.com/Deimvis-go/fw v0.2.0
+	github.com/Deimvis-go/logs v0.2.0
+	github.com/Deimvis-go/ms v0.2.0
+	github.com/Deimvis-go/valid v0.2.0
+	github.com/Deimvis-go/xpg v0.2.0
 	github.com/Deimvis-go/xprometheus v0.1.1
 	github.com/Deimvis/go-ext/go1.25 v0.1.0
 	github.com/Deimvis/models v0.0.0-20260512021822-8ff252108690
